@@ -4,35 +4,30 @@ using FFTW
 using DSP.Windows
 using LinearAlgebra
 
-function hann_filter(index::Integer, signal_length::Integer, filter_length::Integer)
-    hann_function = hanning(filter_length, padding=0, zerophase=false)
-    hann_filter = zeros(signal_length)
-    peak = div(filter_length, 2)
-    if index <= peak
-        cutoff = peak-index
-        hann_filter[1:index+peak] = hann_function[cutoff+1:end]
-    elseif index > peak && index <= signal_length - peak
-        hann_filter[index-peak:index+peak-1] = hann_function
+function short_time_fourier(y::Array, i::Integer, audio_length::Integer, window_length::Integer)
+    radius = div(window_length,2)+1
+    if i >= radius && i < audio_length-radius
+        y = y[i-radius+1:i+radius]
+    elseif i <= radius-1
+        overlap = radius-2-i
+        y = y[1:i+radius]
+        y = append!(zeros(overlap), y)
     else
-        cutoff = peak + index - signal_length - 1
-        hann_filter[index-peak:end] = hann_function[1:end-cutoff]
+        overlap = i-audio_length+radius
+        y = y[i-radius:end]
+        y = append!(y, zeros(overlap))
     end
-    return hann_filter
+    return real(rfft(y.*hanning(window_length, padding=0, zerophase=false)))
 end
-
 
 filename= "92.wav"
 y, fs = wavread(filename)
-
-y = y[1000000:1000:1100000]
+window_length = 44100
 
 audio_length = size(y)[1]
 
-short_time_fourier = zeros(audio_length, audio_length)
-
-for i in range(1, audio_length)
-    fourier = real.(fft(y[1,:].*hann_filter(i, audio_length, 100)))
-    short_time_fourier[i,:] = fourier
+eq = @animate for i in 1:882:audio_length
+    frequencies = short_time_fourier(y[:,1], i, audio_length, window_length)
+    plot(20:10000, frequencies[20:10000], ylimits=[-250,250], xaxis=:log, yaxis=:log)
 end
-heatmap(1:audio_length,1:audio_length,short_time_fourier)   
-savefig("sound.png")
+gif(eq, "eq.gif", fps=50)
